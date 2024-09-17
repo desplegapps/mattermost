@@ -1,0 +1,72 @@
+version: '2.4'
+services:
+  postgres:
+    image: 'postgres:15.8'
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    pids_limit: 100
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    volumes:
+      - 'postgres-data:/var/lib/postgresql/data'
+    environment:
+      - POSTGRES_DB=mattermost
+      - POSTGRES_USER=$SERVICE_USER_POSTGRES_USER
+      - POSTGRES_PASSWORD=$SERVICE_PASSWORD_POSTGRES
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U $SERVICE_USER_POSTGRES_USER -d mattermost -h 127.0.0.1'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mattermost:
+    depends_on:
+      - postgres
+    image: 'mattermost/mattermost-enterprise-edition:8.1.9'
+    restart: unless-stopped
+    security_opt:
+      - 'no-new-privileges:true'
+    pids_limit: 200
+    read_only: false
+    tmpfs:
+      - /tmp
+    volumes:
+      - 'mattermost-config:/mattermost/config:rw'
+      - 'mattermost-data:/mattermost/data:rw'
+      - 'mattermost-logs:/mattermost/logs:rw'
+      - 'mattermost-plugins:/mattermost/plugins:rw'
+      - 'mattermost-client/plugins:/mattermost/client/plugins:rw'
+      - 'mattermost-bleve-indexes:/mattermost/bleve-indexes:rw'
+    environment:
+      - TZ=Etc/UTC
+      - MM_SQLSETTINGS_DRIVERNAME=postgres
+      - 'MM_SQLSETTINGS_DATASOURCE=postgres://$SERVICE_USER_POSTGRES_USER:$SERVICE_PASSWORD_POSTGRES@postgres:5432/mattermost?sslmode=disable&connect_timeout=10'
+      - MM_BLEVESETTINGS_INDEXDIR=/mattermost/bleve-indexes
+      - 'MM_SERVICESETTINGS_SITEURL=http://5.75.133.35:8065'
+      - SERVICE_FQDN_MATTERMOST_8065
+    ports:
+      - '8065:8065'
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - '-q'
+        - '--spider'
+        - 'http://127.0.0.1:8065/api/v4/system/ping'
+      interval: 5s
+      timeout: 20s
+      retries: 10
+
+volumes:
+  postgres-data: null
+  mattermost-config: null
+  mattermost-data: null
+  mattermost-logs: null
+  mattermost-plugins: null
+  mattermost-client/plugins: null
+  mattermost-bleve-indexes: null
